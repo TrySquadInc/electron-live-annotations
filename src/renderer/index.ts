@@ -466,7 +466,7 @@ function createEditorElement<TVerdict extends string>(verdicts: readonly TVerdic
   const editor = document.createElement("form");
   editor.setAttribute(overlayAttribute, "true");
   editor.innerHTML = `
-    <div data-live-annotation-drag-handle="true" title="Drag annotation editor" style="cursor:grab;margin:-6px -6px 10px;padding:6px 6px 10px;touch-action:none;user-select:none;">
+    <div data-live-annotation-drag-handle="true" title="Drag annotation editor" style="cursor:grab;margin:-14px -14px 10px;padding:14px 14px 10px;touch-action:none;user-select:none;">
       <div data-live-annotation-title style="font-weight:600;margin-bottom:2px;">Capture annotation</div>
       <div data-live-annotation-selector style="color:#64748b;font:12px ui-monospace, SFMono-Regular, Menlo, monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
     </div>
@@ -531,6 +531,7 @@ export function createLiveAnnotationController<TVerdict extends string = string>
   const note = editor.querySelector<HTMLTextAreaElement>("[data-live-annotation-note]");
   const verdict = editor.querySelector<HTMLSelectElement>("[data-live-annotation-verdict]");
   const cancel = editor.querySelector<HTMLButtonElement>("[data-live-annotation-cancel]");
+  const dragHandle = editor.querySelector<HTMLElement>("[data-live-annotation-drag-handle]");
 
   function setStatus(value: string) {
     if (status) {
@@ -618,11 +619,11 @@ export function createLiveAnnotationController<TVerdict extends string = string>
 
   function destroy() {
     stop();
-    editor.removeEventListener("pointerdown", onEditorPointerDown);
+    dragHandle?.removeEventListener("pointerdown", onEditorPointerDown);
+    dragHandle?.removeEventListener("pointermove", onEditorPointerMove);
+    dragHandle?.removeEventListener("pointerup", onEditorPointerUp);
+    dragHandle?.removeEventListener("pointercancel", onEditorPointerUp);
     editor.removeEventListener("submit", onSubmit as unknown as EventListener);
-    window.removeEventListener("pointermove", onWindowPointerMove, true);
-    window.removeEventListener("pointerup", onWindowPointerUp, true);
-    window.removeEventListener("pointercancel", onWindowPointerUp, true);
     window.removeEventListener("keydown", onKeyDown, true);
     outline.remove();
     editor.remove();
@@ -712,10 +713,11 @@ export function createLiveAnnotationController<TVerdict extends string = string>
       return;
     }
 
-    if (!event.target.closest("[data-live-annotation-drag-handle='true']")) {
+    if (event.target.closest("button, input, select, textarea, a")) {
       return;
     }
 
+    const dragElement = event.currentTarget instanceof HTMLElement ? event.currentTarget : editor;
     const rect = editor.getBoundingClientRect();
     editorDragState = {
       pointerId: event.pointerId,
@@ -724,12 +726,13 @@ export function createLiveAnnotationController<TVerdict extends string = string>
       startPointerY: event.clientY,
       startTop: rect.top,
     };
-    editor.setPointerCapture?.(event.pointerId);
+    dragElement.setPointerCapture?.(event.pointerId);
+    dragElement.style.cursor = "grabbing";
     editor.style.cursor = "grabbing";
     event.preventDefault();
   }
 
-  function onWindowPointerMove(event: PointerEvent) {
+  function onEditorPointerMove(event: PointerEvent) {
     if (!editorDragState || event.pointerId !== editorDragState.pointerId) {
       return;
     }
@@ -744,9 +747,10 @@ export function createLiveAnnotationController<TVerdict extends string = string>
     );
     editor.style.left = `${nextPosition.x}px`;
     editor.style.top = `${nextPosition.y}px`;
+    event.preventDefault();
   }
 
-  function onWindowPointerUp(event: PointerEvent) {
+  function onEditorPointerUp(event: PointerEvent) {
     if (editorDragState && event.pointerId === editorDragState.pointerId) {
       const nextPosition = clampAnnotationEditorPosition(
         {
@@ -759,19 +763,22 @@ export function createLiveAnnotationController<TVerdict extends string = string>
       editor.style.left = `${nextPosition.x}px`;
       editor.style.top = `${nextPosition.y}px`;
       writeStoredAnnotationEditorPosition(localStorageKeyPrefix, nextPosition);
-      editor.releasePointerCapture?.(event.pointerId);
+      const dragElement = event.currentTarget instanceof HTMLElement ? event.currentTarget : editor;
+      dragElement.releasePointerCapture?.(event.pointerId);
+      dragElement.style.cursor = "grab";
       editor.style.cursor = "";
       editorDragState = null;
+      event.preventDefault();
     }
   }
 
   editor.addEventListener("submit", onSubmit as unknown as EventListener);
-  editor.addEventListener("pointerdown", onEditorPointerDown);
+  dragHandle?.addEventListener("pointerdown", onEditorPointerDown);
+  dragHandle?.addEventListener("pointermove", onEditorPointerMove);
+  dragHandle?.addEventListener("pointerup", onEditorPointerUp);
+  dragHandle?.addEventListener("pointercancel", onEditorPointerUp);
   cancel?.addEventListener("click", closeEditor);
   window.addEventListener("keydown", onKeyDown, true);
-  window.addEventListener("pointermove", onWindowPointerMove, true);
-  window.addEventListener("pointerup", onWindowPointerUp, true);
-  window.addEventListener("pointercancel", onWindowPointerUp, true);
   if (enabled) {
     start();
   }

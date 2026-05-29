@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   annotationIdentityForElement,
   clampAnnotationEditorPosition,
+  createLiveAnnotationController,
   cssSelectorForElement,
   dataAttributesForElement,
   isAnnotationOverlayElement,
@@ -26,6 +27,29 @@ type FakeElementNode = {
   parentElement: FakeElementNode | null;
   tagName: string;
   textContent: string;
+};
+
+type FakeDomRect = {
+  bottom: number;
+  height: number;
+  left: number;
+  right: number;
+  top: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
+type FakePointerEvent = {
+  button: number;
+  clientX: number;
+  clientY: number;
+  currentTarget?: TestDomElement;
+  defaultPrevented?: boolean;
+  pointerId: number;
+  preventDefault: () => void;
+  stopPropagation?: () => void;
+  target: TestDomElement;
 };
 
 const fakeElementRuntime = Object.defineProperty(() => null, Symbol.hasInstance, {
@@ -93,6 +117,185 @@ function makeFakeElement(
   };
 
   return element;
+}
+
+class TestStyle {
+  [key: string]: string | ((name: string, value: string) => void);
+
+  setProperty(name: string, value: string) {
+    this[name] = value;
+    this[name.replace(/-([a-z])/g, (_, character: string) => character.toUpperCase())] = value;
+  }
+}
+
+class TestDomElement {
+  __fakeElement = true;
+  attributes: FakeAttribute[] = [];
+  children: TestDomElement[] = [];
+  isContentEditable = false;
+  listeners = new Map<string, Array<(event: FakePointerEvent) => void>>();
+  nodeType = 1;
+  offsetHeight = 230;
+  offsetWidth = 360;
+  parentElement: TestDomElement | null = null;
+  rect: FakeDomRect | null = null;
+  style = new TestStyle();
+  textContent = "";
+  value = "";
+
+  constructor(public tagName: string) {}
+
+  set innerHTML(value: string) {
+    this.children = [];
+    if (!value.includes("data-live-annotation-drag-handle")) {
+      return;
+    }
+
+    const dragHandle = this.append(new TestDomElement("DIV"));
+    dragHandle.setAttribute("data-live-annotation-drag-handle", "true");
+    dragHandle.style.cursor = "grab";
+    dragHandle.append(new TestDomElement("DIV")).setAttribute("data-live-annotation-title", "");
+    dragHandle.append(new TestDomElement("DIV")).setAttribute("data-live-annotation-selector", "");
+
+    this.append(new TestDomElement("SELECT")).setAttribute("data-live-annotation-verdict", "");
+    this.append(new TestDomElement("TEXTAREA")).setAttribute("data-live-annotation-note", "");
+    this.append(new TestDomElement("SPAN")).setAttribute("data-live-annotation-status", "");
+    this.append(new TestDomElement("BUTTON")).setAttribute("data-live-annotation-cancel", "");
+    this.append(new TestDomElement("BUTTON")).setAttribute("data-live-annotation-save", "");
+  }
+
+  addEventListener(type: string, listener: (event: FakePointerEvent) => void) {
+    const listeners = this.listeners.get(type) ?? [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  append<T extends TestDomElement>(child: T, ...rest: TestDomElement[]) {
+    for (const next of [child, ...rest]) {
+      next.parentElement = this;
+      this.children.push(next);
+    }
+    return child;
+  }
+
+  closest(selector: string) {
+    const selectors = selector.split(",").map((entry) => entry.trim());
+    let current: TestDomElement | null = this;
+    while (current) {
+      if (selectors.some((entry) => current?.matches(entry))) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  dispatchPointer(type: string, input: Omit<FakePointerEvent, "currentTarget" | "preventDefault">) {
+    const event: FakePointerEvent = {
+      ...input,
+      preventDefault() {
+        event.defaultPrevented = true;
+      },
+    };
+
+    for (const listener of this.listeners.get(type) ?? []) {
+      event.currentTarget = this;
+      listener(event);
+    }
+
+    return event;
+  }
+
+  focus() {}
+
+  getAttribute(name: string) {
+    return this.attributes.find((attribute) => attribute.name === name)?.value ?? null;
+  }
+
+  getBoundingClientRect() {
+    const left = Number.parseFloat(String(this.style.left ?? "0"));
+    const top = Number.parseFloat(String(this.style.top ?? "0"));
+    return (
+      this.rect ?? {
+        bottom: top + this.offsetHeight,
+        height: this.offsetHeight,
+        left,
+        right: left + this.offsetWidth,
+        top,
+        width: this.offsetWidth,
+        x: left,
+        y: top,
+      }
+    );
+  }
+
+  matches(selector: string) {
+    const attribute = selector.match(/^\[([^=\]]+)(?:=['"]?([^'"\]]+)['"]?)?\]$/);
+    if (attribute) {
+      const name = attribute[1] ?? "";
+      const value = attribute[2];
+      const actual = this.getAttribute(name);
+      return value === undefined ? actual !== null : actual === value;
+    }
+
+    return selector.toLowerCase() === this.tagName.toLowerCase();
+  }
+
+  querySelector<T = TestDomElement>(selector: string): T | null {
+    for (const child of this.children) {
+      if (child.matches(selector)) {
+        return child as T;
+      }
+      const descendant = child.querySelector<T>(selector);
+      if (descendant) {
+        return descendant;
+      }
+    }
+    return null;
+  }
+
+  releasePointerCapture() {}
+
+  remove() {
+    if (!this.parentElement) {
+      return;
+    }
+    this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
+    this.parentElement = null;
+  }
+
+  removeEventListener(type: string, listener: (event: FakePointerEvent) => void) {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter((candidate) => candidate !== listener),
+    );
+  }
+
+  setAttribute(name: string, value: string) {
+    const existing = this.attributes.find((attribute) => attribute.name === name);
+    if (existing) {
+      existing.value = value;
+      return;
+    }
+    this.attributes.push({ name, value });
+  }
+
+  setPointerCapture() {}
+}
+
+function makePointerEvent(target: TestDomElement, input: Partial<FakePointerEvent>) {
+  return {
+    button: input.button ?? 0,
+    clientX: input.clientX ?? 0,
+    clientY: input.clientY ?? 0,
+    defaultPrevented: false,
+    pointerId: input.pointerId ?? 1,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    stopPropagation: vi.fn(),
+    target,
+  } satisfies FakePointerEvent;
 }
 
 describe("renderer annotation helpers", () => {
@@ -211,5 +414,95 @@ describe("renderer annotation helpers", () => {
         { height: 640, width: 1024 },
       ),
     ).toEqual({ x: 648, y: 30 });
+  });
+
+  it("drags the editor from the visible header surface", () => {
+    const windowListeners = new Map<string, Array<(event: FakePointerEvent) => void>>();
+    const body = new TestDomElement("BODY");
+    const documentElement = new TestDomElement("HTML");
+    const storage = new Map<string, string>();
+
+    vi.stubGlobal("Element", TestDomElement);
+    vi.stubGlobal("HTMLElement", TestDomElement);
+    vi.stubGlobal("HTMLTextAreaElement", TestDomElement);
+    vi.stubGlobal("window", {
+      addEventListener: (type: string, listener: (event: FakePointerEvent) => void) => {
+        const listeners = windowListeners.get(type) ?? [];
+        listeners.push(listener);
+        windowListeners.set(type, listeners);
+      },
+      innerHeight: 640,
+      innerWidth: 1024,
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+      removeEventListener: vi.fn(),
+      setTimeout: (callback: () => void) => {
+        callback();
+        return 0;
+      },
+    });
+    vi.stubGlobal("document", {
+      body,
+      createElement: (tagName: string) => new TestDomElement(tagName.toUpperCase()),
+      documentElement,
+      elementFromPoint: vi.fn(),
+      title: "Test",
+    });
+
+    const controller = createLiveAnnotationController({ enabled: true });
+    const target = new TestDomElement("SECTION");
+    target.rect = {
+      bottom: 180,
+      height: 80,
+      left: 100,
+      right: 220,
+      top: 100,
+      width: 120,
+      x: 100,
+      y: 100,
+    };
+
+    for (const listener of windowListeners.get("click") ?? []) {
+      listener(makePointerEvent(target, { clientX: 110, clientY: 110 }));
+    }
+
+    const editor = body.children.find((child) => child.tagName === "FORM");
+    const dragHeader = editor?.querySelector<TestDomElement>("[data-live-annotation-drag-handle]");
+    expect(editor?.style.left).toBe("232px");
+    expect(editor?.style.top).toBe("100px");
+    expect(dragHeader).toBeTruthy();
+
+    const start = dragHeader?.dispatchPointer("pointerdown", {
+      button: 0,
+      clientX: 252,
+      clientY: 108,
+      pointerId: 7,
+      target: dragHeader,
+    });
+    dragHeader?.dispatchPointer("pointermove", {
+      button: 0,
+      clientX: 292,
+      clientY: 138,
+      pointerId: 7,
+      target: dragHeader,
+    });
+    dragHeader?.dispatchPointer("pointerup", {
+      button: 0,
+      clientX: 292,
+      clientY: 138,
+      pointerId: 7,
+      target: dragHeader,
+    });
+
+    expect(start?.defaultPrevented).toBe(true);
+    expect(editor?.style.left).toBe("272px");
+    expect(editor?.style.top).toBe("130px");
+    expect(storage.get("electron-live-annotations.editorPosition")).toBe(
+      JSON.stringify({ x: 272, y: 130 }),
+    );
+
+    controller.destroy();
   });
 });
