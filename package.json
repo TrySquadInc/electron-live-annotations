@@ -1,0 +1,59 @@
+{
+  "name": "electron-live-annotations",
+  "version": "0.1.0",
+  "description": "Framework-agnostic live annotation layer for Electron apps.",
+  "type": "module",
+  "license": "MIT",
+  "private": false,
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./main": {
+      "types": "./dist/main/index.d.ts",
+      "import": "./dist/main/index.js"
+    },
+    "./main/persistence": {
+      "types": "./dist/main/persistence.d.ts",
+      "import": "./dist/main/persistence.js"
+    },
+    "./preload": {
+      "types": "./dist/preload/index.d.ts",
+      "import": "./dist/preload/index.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer/index.d.ts",
+      "import": "./dist/renderer/index.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/types.d.ts",
+      "import": "./dist/shared/types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/shared/types.ts src/main/index.ts src/main/persistence.ts src/preload/index.ts src/renderer/index.ts --format esm --dts --clean --silent",
+    "prepack": "pnpm --silent build",
+    "prepublishOnly": "pnpm verify",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "peerDependencies": {
+    "electron": ">=27"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "electron": "^41.2.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  }
+}
