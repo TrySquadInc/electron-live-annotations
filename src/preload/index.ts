@@ -17,8 +17,8 @@ export function createAnnotationPreloadApi(
   const channel = options.channel ?? defaultAnnotationCaptureIpcChannel;
 
   return {
-    captureElement(request: AnnotationCaptureRequest<string>) {
-      return ipcRenderer.invoke(channel, request) as Promise<AnnotationCaptureResult<string>>;
+    async captureElement(request: AnnotationCaptureRequest<string>) {
+      return (await ipcRenderer.invoke(channel, request)) as AnnotationCaptureResult<string>;
     },
   };
 }

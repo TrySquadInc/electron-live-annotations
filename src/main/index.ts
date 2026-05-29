@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   type AnnotationCaptureRequest,
+  type AnnotationCaptureResult,
   defaultAnnotationCaptureIpcChannel,
   defaultAnnotationVerdicts,
 } from "../shared/types.js";
@@ -63,7 +64,8 @@ export function registerAnnotationCaptureIpc<TVerdict extends string = string>(
       viewportImage,
     });
 
-    return { manifest };
+    const result = { manifest } satisfies AnnotationCaptureResult<TVerdict>;
+    return JSON.parse(JSON.stringify(result)) as AnnotationCaptureResult<TVerdict>;
   });
 
   return { channel };
