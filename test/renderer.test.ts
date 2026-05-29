@@ -5,8 +5,10 @@ import {
   cssSelectorForElement,
   dataAttributesForElement,
   isAnnotationOverlayElement,
+  readStoredAnnotationEditorPosition,
   shouldToggleAnnotationModeShortcut,
   stableSelectorForElement,
+  writeStoredAnnotationEditorPosition,
   xpathForElement,
 } from "../src/renderer/index.js";
 
@@ -189,5 +191,25 @@ describe("renderer annotation helpers", () => {
         { height: 640, width: 1024 },
       ),
     ).toEqual({ x: 16, y: 404 });
+  });
+
+  it("persists and clamps the floating annotation editor position", () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+
+    writeStoredAnnotationEditorPosition("test-annotations", { x: 900, y: 30 });
+
+    expect(
+      readStoredAnnotationEditorPosition(
+        "test-annotations",
+        { height: 220, width: 360 },
+        { height: 640, width: 1024 },
+      ),
+    ).toEqual({ x: 648, y: 30 });
   });
 });

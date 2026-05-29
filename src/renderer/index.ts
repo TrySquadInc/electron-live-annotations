@@ -59,6 +59,60 @@ function storageKey(prefix: string, key: string) {
   return `${prefix}.${key}`;
 }
 
+function parseStoredEditorPosition(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<AnnotationEditorPosition>;
+    if (Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
+      return { x: Number(parsed.x), y: Number(parsed.y) };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function readStoredAnnotationEditorPosition(
+  localStorageKeyPrefix: string,
+  size: AnnotationEditorSize,
+  viewport: AnnotationEditorSize,
+): AnnotationEditorPosition | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const stored = parseStoredEditorPosition(
+      window.localStorage.getItem(storageKey(localStorageKeyPrefix, "editorPosition")),
+    );
+    return stored ? clampAnnotationEditorPosition(stored, size, viewport) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredAnnotationEditorPosition(
+  localStorageKeyPrefix: string,
+  position: AnnotationEditorPosition,
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      storageKey(localStorageKeyPrefix, "editorPosition"),
+      JSON.stringify(position),
+    );
+  } catch {
+    return;
+  }
+}
+
 function getWindowApi<TVerdict extends string>(apiKey: string) {
   return (window as unknown as Record<string, AnnotationPreloadApi<TVerdict> | undefined>)[apiKey];
 }
@@ -412,7 +466,7 @@ function createEditorElement<TVerdict extends string>(verdicts: readonly TVerdic
   const editor = document.createElement("form");
   editor.setAttribute(overlayAttribute, "true");
   editor.innerHTML = `
-    <div data-live-annotation-drag-handle="true" style="cursor:move;margin:-4px -4px 10px;padding:4px;user-select:none;">
+    <div data-live-annotation-drag-handle="true" title="Drag annotation editor" style="cursor:grab;margin:-6px -6px 10px;padding:6px 6px 10px;touch-action:none;user-select:none;">
       <div data-live-annotation-title style="font-weight:600;margin-bottom:2px;">Capture annotation</div>
       <div data-live-annotation-selector style="color:#64748b;font:12px ui-monospace, SFMono-Regular, Menlo, monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
     </div>
@@ -501,12 +555,18 @@ export function createLiveAnnotationController<TVerdict extends string = string>
   function openEditor(element: Element) {
     selectedElement = element;
     const rect = element.getBoundingClientRect();
-    const editorPosition = clampAnnotationEditorPosition(
-      { x: rect.right + 12, y: rect.top },
-      { height: 230, width: 360 },
-      { height: window.innerHeight, width: window.innerWidth },
-    );
     editor.style.display = "block";
+    const size = editorSize();
+    const editorPosition =
+      readStoredAnnotationEditorPosition(localStorageKeyPrefix, size, {
+        height: window.innerHeight,
+        width: window.innerWidth,
+      }) ??
+      clampAnnotationEditorPosition(
+        { x: rect.right + 12, y: rect.top },
+        size,
+        { height: window.innerHeight, width: window.innerWidth },
+      );
     editor.style.left = `${editorPosition.x}px`;
     editor.style.top = `${editorPosition.y}px`;
     if (selectorLabel) {
@@ -664,6 +724,8 @@ export function createLiveAnnotationController<TVerdict extends string = string>
       startPointerY: event.clientY,
       startTop: rect.top,
     };
+    editor.setPointerCapture?.(event.pointerId);
+    editor.style.cursor = "grabbing";
     event.preventDefault();
   }
 
@@ -686,6 +748,19 @@ export function createLiveAnnotationController<TVerdict extends string = string>
 
   function onWindowPointerUp(event: PointerEvent) {
     if (editorDragState && event.pointerId === editorDragState.pointerId) {
+      const nextPosition = clampAnnotationEditorPosition(
+        {
+          x: editorDragState.startLeft + event.clientX - editorDragState.startPointerX,
+          y: editorDragState.startTop + event.clientY - editorDragState.startPointerY,
+        },
+        editorSize(),
+        { height: window.innerHeight, width: window.innerWidth },
+      );
+      editor.style.left = `${nextPosition.x}px`;
+      editor.style.top = `${nextPosition.y}px`;
+      writeStoredAnnotationEditorPosition(localStorageKeyPrefix, nextPosition);
+      editor.releasePointerCapture?.(event.pointerId);
+      editor.style.cursor = "";
       editorDragState = null;
     }
   }
