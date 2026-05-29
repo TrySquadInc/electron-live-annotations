@@ -4,7 +4,7 @@ Framework-agnostic live annotation layer for Electron apps.
 
 ## Demo
 
-<video src="https://raw.githubusercontent.com/danialhasan/electron-live-annotations/main/media/live-annotations-demo.mp4" controls muted playsinline></video>
+https://github.com/user-attachments/assets/ea305638-0a38-4d9f-8018-7a0631a36c47
 
 Browser-only review tools can inspect DOM and screenshots, but they cannot reach the native Electron layer where IPC, file dialogs, auth callbacks, packaged app boundaries, updater flows, and local filesystem state often matter. This package adds an in-app annotation layer that lets a human click the real Electron UI, write a note, and save a local receipt with:
 
