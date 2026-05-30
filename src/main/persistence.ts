@@ -105,6 +105,14 @@ export function pngDimensionsFromBuffer(
   };
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function normalizeAnnotationCaptureRequest<TVerdict extends string = string>(
   input: unknown,
   verdicts: readonly TVerdict[] = defaultAnnotationVerdicts as unknown as readonly TVerdict[],
@@ -114,11 +122,21 @@ export function normalizeAnnotationCaptureRequest<TVerdict extends string = stri
   }
 
   const request = input as Partial<AnnotationCaptureRequest<TVerdict>>;
-  if (!request.sessionId || !request.annotationId) {
-    throw new Error("Annotation capture request requires sessionId and annotationId.");
+  if (!isNonEmptyString(request.sessionId) || !isNonEmptyString(request.annotationId)) {
+    throw new Error(
+      "Annotation capture request requires non-empty string sessionId and annotationId.",
+    );
   }
-  if (!request.route || !request.rect || !request.viewport || !request.element) {
+  if (
+    !isPlainObject(request.route) ||
+    !isPlainObject(request.element) ||
+    !isPlainObject(request.rect) ||
+    !isPlainObject(request.viewport)
+  ) {
     throw new Error("Annotation capture request is missing route, rect, viewport, or element.");
+  }
+  if (request.note !== undefined && typeof request.note !== "string") {
+    throw new Error("Annotation capture request note must be a string.");
   }
   if (!verdicts.includes(request.verdict as TVerdict)) {
     throw new Error(`Unsupported annotation verdict: ${String(request.verdict)}`);

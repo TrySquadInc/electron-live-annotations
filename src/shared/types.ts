@@ -26,6 +26,8 @@ export type AnnotationViewport = {
   width: number;
   height: number;
   deviceScaleFactor: number;
+  scrollX?: number;
+  scrollY?: number;
 };
 
 export type AnnotationElementIdentity = {

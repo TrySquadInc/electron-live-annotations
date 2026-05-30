@@ -41,6 +41,7 @@ export type LiveAnnotationControllerOptions<TVerdict extends string = string> =
     localStorageKeyPrefix?: string;
     onError?: (error: unknown) => void;
     onSaved?: (result: AnnotationCaptureResult<TVerdict>) => void;
+    toggleKey?: string;
     verdicts?: readonly TVerdict[];
   };
 
@@ -138,16 +139,19 @@ export function isEditableKeyboardTarget(target: EventTarget | null) {
   );
 }
 
-export function shouldToggleAnnotationModeShortcut(event: {
-  altKey?: boolean;
-  ctrlKey?: boolean;
-  defaultPrevented?: boolean;
-  isComposing?: boolean;
-  key: string;
-  metaKey?: boolean;
-  shiftKey?: boolean;
-  targetIsEditable?: boolean;
-}) {
+export function shouldToggleAnnotationModeShortcut(
+  event: {
+    altKey?: boolean;
+    ctrlKey?: boolean;
+    defaultPrevented?: boolean;
+    isComposing?: boolean;
+    key: string;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+    targetIsEditable?: boolean;
+  },
+  expectedKey = ".",
+) {
   if (
     event.defaultPrevented ||
     event.isComposing ||
@@ -159,7 +163,7 @@ export function shouldToggleAnnotationModeShortcut(event: {
     return false;
   }
 
-  return event.key === ".";
+  return event.key === expectedKey;
 }
 
 export function clampAnnotationEditorPosition(
@@ -181,8 +185,18 @@ export function createAnnotationSessionId(date: Date) {
   return `annotation-${date.toISOString().replace(/[:.]/g, "-")}`;
 }
 
-export function createAnnotationId(date: Date) {
-  return `note-${date.toISOString().replace(/[:.]/g, "-")}`;
+function randomAnnotationToken() {
+  const cryptoApi = typeof globalThis !== "undefined" ? globalThis.crypto : undefined;
+  if (cryptoApi?.getRandomValues) {
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(4));
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  return Math.random().toString(16).slice(2, 10).padStart(8, "0");
+}
+
+export function createAnnotationId(date: Date, uniqueness: string = randomAnnotationToken()) {
+  return `note-${date.toISOString().replace(/[:.]/g, "-")}-${uniqueness}`;
 }
 
 function cssEscape(value: string) {
@@ -383,6 +397,8 @@ export function viewportSnapshot(): AnnotationViewport {
   return {
     deviceScaleFactor: window.devicePixelRatio || 1,
     height: window.innerHeight,
+    scrollX: window.scrollX || 0,
+    scrollY: window.scrollY || 0,
     width: window.innerWidth,
   };
 }
@@ -474,7 +490,7 @@ function createEditorElement<TVerdict extends string>(verdicts: readonly TVerdic
     <select data-live-annotation-verdict style="box-sizing:border-box;margin-bottom:8px;width:100%;"></select>
     <textarea data-live-annotation-note placeholder="What should change here?" style="box-sizing:border-box;height:108px;margin-bottom:10px;resize:vertical;width:100%;"></textarea>
     <div style="align-items:center;display:flex;gap:8px;justify-content:space-between;">
-      <span data-live-annotation-status style="color:#64748b;font-size:12px;">Cmd+. toggles, Esc exits</span>
+      <span data-live-annotation-status style="color:#64748b;font-size:12px;">Cmd/Ctrl+. toggles, Esc exits</span>
       <div style="display:flex;gap:8px;">
         <button type="button" data-live-annotation-cancel>Cancel</button>
         <button type="submit" data-live-annotation-save>Save</button>
@@ -519,7 +535,9 @@ export function createLiveAnnotationController<TVerdict extends string = string>
   const verdicts =
     options.verdicts ?? (defaultAnnotationVerdicts as unknown as readonly TVerdict[]);
   const localStorageKeyPrefix = options.localStorageKeyPrefix ?? "electron-live-annotations";
-  let enabled = options.enabled ?? false;
+  const toggleKey = options.toggleKey ?? ".";
+  let enabled = false;
+  let noteDraft = "";
   let selectedElement: Element | null = null;
   let hoverElement: Element | null = null;
   let editorDragState: AnnotationEditorDragState | null = null;
@@ -575,7 +593,7 @@ export function createLiveAnnotationController<TVerdict extends string = string>
         stableSelectorForElement(element, options) ?? cssSelectorForElement(element, options);
     }
     if (note) {
-      note.value = "";
+      note.value = noteDraft;
       window.setTimeout(() => note.focus(), 0);
     }
     setStatus("Ready to save");
@@ -594,7 +612,15 @@ export function createLiveAnnotationController<TVerdict extends string = string>
     editor.style.display = "none";
   }
 
+  function onCancel() {
+    noteDraft = "";
+    closeEditor();
+  }
+
   function start() {
+    if (enabled) {
+      return;
+    }
     enabled = true;
     document.body.append(outline, editor);
     window.addEventListener("mousemove", onMouseMove, true);
@@ -602,6 +628,9 @@ export function createLiveAnnotationController<TVerdict extends string = string>
   }
 
   function stop() {
+    if (!enabled) {
+      return;
+    }
     enabled = false;
     closeEditor();
     outline.style.display = "none";
@@ -654,16 +683,19 @@ export function createLiveAnnotationController<TVerdict extends string = string>
 
   function onKeyDown(event: KeyboardEvent) {
     if (
-      shouldToggleAnnotationModeShortcut({
-        altKey: event.altKey,
-        ctrlKey: event.ctrlKey,
-        defaultPrevented: event.defaultPrevented,
-        isComposing: event.isComposing,
-        key: event.key,
-        metaKey: event.metaKey,
-        shiftKey: event.shiftKey,
-        targetIsEditable: isEditableKeyboardTarget(event.target),
-      })
+      shouldToggleAnnotationModeShortcut(
+        {
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          defaultPrevented: event.defaultPrevented,
+          isComposing: event.isComposing,
+          key: event.key,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+          targetIsEditable: isEditableKeyboardTarget(event.target),
+        },
+        toggleKey,
+      )
     ) {
       event.preventDefault();
       toggle();
@@ -672,7 +704,12 @@ export function createLiveAnnotationController<TVerdict extends string = string>
 
     if (event.key === "Escape" && enabled) {
       event.preventDefault();
-      stop();
+      if (selectedElement) {
+        noteDraft = note?.value ?? noteDraft;
+        closeEditor();
+      } else {
+        stop();
+      }
     }
   }
 
@@ -700,6 +737,7 @@ export function createLiveAnnotationController<TVerdict extends string = string>
       });
       const result = await captureApi.captureElement(request);
       options.onSaved?.(result);
+      noteDraft = "";
       setStatus(`Saved ${result.manifest.annotationId}`);
       closeEditor();
     } catch (error) {
@@ -777,9 +815,10 @@ export function createLiveAnnotationController<TVerdict extends string = string>
   dragHandle?.addEventListener("pointermove", onEditorPointerMove);
   dragHandle?.addEventListener("pointerup", onEditorPointerUp);
   dragHandle?.addEventListener("pointercancel", onEditorPointerUp);
-  cancel?.addEventListener("click", closeEditor);
+  cancel?.addEventListener("click", onCancel);
   window.addEventListener("keydown", onKeyDown, true);
-  if (enabled) {
+  setStatus(`Cmd/Ctrl+${toggleKey} toggles, Esc exits`);
+  if (options.enabled ?? false) {
     start();
   }
 
