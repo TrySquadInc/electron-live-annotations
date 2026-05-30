@@ -23,7 +23,7 @@ It does not require React, Vue, Svelte, Solid, or any UI framework. It is plain 
 pnpm add electron-live-annotations
 ```
 
-`electron` is a peer dependency.
+`electron` is a peer dependency. This package targets Electron 28 and newer.
 
 ## Wire Electron Main
 
@@ -51,6 +51,8 @@ The handler captures the active `BrowserWindow`, crops the clicked element from 
 
 Replace the `shouldCapture` guard with your app's trusted-window policy. Do not expose screenshot capture to arbitrary remote pages. Treat annotations as a trusted-app-shell review tool unless you have a stronger product-specific permission model.
 
+If `shouldCapture` is omitted, capture is allowed and a warning is logged. That default keeps local review setup lightweight, but production apps should pass an explicit policy. Use `allowAllCaptures` from `electron-live-annotations/main` only when that intent is deliberate at the call site.
+
 ## Wire Preload
 
 Expose the safe bridge in your preload script:
@@ -77,6 +79,7 @@ import { createLiveAnnotationController } from "electron-live-annotations/render
 
 const annotations = createLiveAnnotationController({
   enabled: false,
+  toggleKey: ".",
   onSaved(result) {
     console.log("Saved annotation", result.manifest.manifestJsonlPath);
   },
@@ -96,7 +99,7 @@ When active:
 3. choose a verdict and write a note;
 4. save.
 
-`Esc` exits annotation mode.
+`Cmd+.` on macOS or `Ctrl+.` elsewhere toggles by default. Set `toggleKey` to choose a different key. `Esc` closes the current editor and preserves its draft; press `Esc` again with no editor open to exit annotation mode. The Cancel button discards the draft.
 
 ## Stable Selectors
 
@@ -143,7 +146,13 @@ type AnnotationManifestRow = {
     title: string;
   };
   rect: { x: number; y: number; width: number; height: number };
-  viewport: { width: number; height: number; deviceScaleFactor: number };
+  viewport: {
+    width: number;
+    height: number;
+    deviceScaleFactor: number;
+    scrollX?: number;
+    scrollY?: number;
+  };
   element: {
     stableSelector: string | null;
     cssSelector: string;
@@ -159,7 +168,11 @@ type AnnotationManifestRow = {
   verdict: string;
   note: string;
   elementImagePath: string;
+  elementImageRelativePath: string;
+  manifestJsonPath: string;
+  manifestJsonlPath: string;
   viewportImagePath: string | null;
+  viewportImageRelativePath: string | null;
 };
 ```
 

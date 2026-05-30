@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   annotationCaptureRectsForImage,
   annotationImageRelativePath,
+  normalizeAnnotationCaptureRequest,
   persistAnnotationCapture,
   sanitizeAnnotationPathSegment,
 } from "../src/main/persistence.js";
@@ -72,9 +73,45 @@ describe("main persistence helpers", () => {
 
     expect(manifest.elementImagePath).toContain("note-one-element.png");
     expect(manifest.viewportImagePath).toContain("note-one-viewport.png");
+    expect(manifest.elementImageRelativePath).toBe(join("images", "note-one-element.png"));
+    expect(manifest.viewportImageRelativePath).toBe(join("images", "note-one-viewport.png"));
     const row = await readFile(manifest.manifestJsonlPath, "utf8");
     expect(row).toContain("\"annotationId\":\"note:one\"");
+    expect(JSON.parse(row)).toMatchObject({
+      elementImageRelativePath: join("images", "note-one-element.png"),
+      viewportImageRelativePath: join("images", "note-one-viewport.png"),
+    });
     const pointer = await readFile(manifest.manifestJsonPath, "utf8");
     expect(pointer).toContain("manifestJsonlPath");
+  });
+
+  it("rejects malformed capture requests before downstream path and rect handling", () => {
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), sessionId: 123 })).toThrow(
+      "non-empty string sessionId and annotationId",
+    );
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), annotationId: [] })).toThrow(
+      "non-empty string sessionId and annotationId",
+    );
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), annotationId: "   " })).toThrow(
+      "non-empty string sessionId and annotationId",
+    );
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), route: [] })).toThrow(
+      "missing route, rect, viewport, or element",
+    );
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), element: [] })).toThrow(
+      "missing route, rect, viewport, or element",
+    );
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), rect: null })).toThrow(
+      "missing route, rect, viewport, or element",
+    );
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), rect: [] })).toThrow(
+      "missing route, rect, viewport, or element",
+    );
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), viewport: 1 })).toThrow(
+      "missing route, rect, viewport, or element",
+    );
+    expect(() => normalizeAnnotationCaptureRequest({ ...request(), note: 1 })).toThrow(
+      "note must be a string",
+    );
   });
 });

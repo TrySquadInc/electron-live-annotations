@@ -10,6 +10,7 @@
     "dist",
     "README.md",
     "AGENTS.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "exports": {
@@ -47,7 +48,7 @@
     "verify": "pnpm typecheck && pnpm test && pnpm build"
   },
   "peerDependencies": {
-    "electron": ">=27"
+    "electron": ">=28"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
