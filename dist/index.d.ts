@@ -1,0 +1,1 @@
+export { AnnotationCaptureRequest, AnnotationCaptureResult, AnnotationElementIdentity, AnnotationManifestRow, AnnotationPreloadApi, AnnotationRect, AnnotationRouteSnapshot, AnnotationViewport, DefaultAnnotationVerdict, annotationSchemaVersion, defaultAnnotationCaptureIpcChannel, defaultAnnotationVerdicts } from './shared/types.js';
