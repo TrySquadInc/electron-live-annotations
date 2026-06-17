@@ -1,6 +1,6 @@
 {
   "name": "electron-live-annotations",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-agnostic live annotation layer for Electron apps.",
   "type": "module",
   "license": "MIT",

@@ -2,7 +2,17 @@ export const defaultAnnotationCaptureIpcChannel = "electron-live-annotations:cap
 
 export const annotationSchemaVersion = 1;
 
-export const defaultAnnotationVerdicts = [
+export type DefaultAnnotationVerdict =
+  | "note"
+  | "approved"
+  | "confusing"
+  | "bug"
+  | "copy"
+  | "design"
+  | "blocked"
+  | "needs-product-decision";
+
+export const defaultAnnotationVerdicts: readonly DefaultAnnotationVerdict[] = [
   "note",
   "approved",
   "confusing",
@@ -11,9 +21,7 @@ export const defaultAnnotationVerdicts = [
   "design",
   "blocked",
   "needs-product-decision",
-] as const;
-
-export type DefaultAnnotationVerdict = (typeof defaultAnnotationVerdicts)[number];
+];
 
 export type AnnotationRect = {
   x: number;
