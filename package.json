@@ -1,6 +1,6 @@
 {
   "name": "electron-live-annotations",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Framework-agnostic live annotation layer for Electron apps.",
   "type": "module",
   "license": "MIT",
@@ -41,7 +41,7 @@
   },
   "scripts": {
     "build": "tsup src/index.ts src/shared/types.ts src/main/index.ts src/main/persistence.ts src/preload/index.ts src/renderer/index.ts --format esm --dts --clean --silent",
-    "prepack": "pnpm --silent build",
+    "prepack": "node scripts/ensure-dist.mjs",
     "prepublishOnly": "pnpm verify",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

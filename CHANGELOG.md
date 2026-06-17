@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Commit built `dist` output for GitHub release consumers.
+- Skip source rebuild during git dependency prepack when `dist` is already present.
+
 ## 0.1.1
 
 - Avoid `as const` in shared verdict type declarations so git dependency prepack builds remain compatible with consumer CI DTS parsing.
