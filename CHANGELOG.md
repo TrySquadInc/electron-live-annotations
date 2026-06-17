@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Avoid `as const` in shared verdict type declarations so git dependency prepack builds remain compatible with consumer CI DTS parsing.
+
 ## 0.1.0
 
 - Initial public extraction of the Electron live annotation capture workflow.
